@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/frasnym/go-expense-telebot/common"
@@ -67,6 +68,22 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		return err
 	}
 
+	defer func() {
+		// Notify result
+		resultMsg := "Finished"
+		for _, v := range result {
+			resultMsg = fmt.Sprintf("%s\n- %s", resultMsg, v)
+		}
+		resultMsg = fmt.Sprintf("%s\n\nURL: %s", resultMsg, "TBA")
+
+		err = s.notifyError(ctx, userID, resultMsg)
+		if err != nil {
+			err = fmt.Errorf("err notifyError: %w", err)
+		}
+
+		session.DeleteUserSession(userID)
+	}()
+
 	// Get file url
 	fileUrl, errDoc := s.botRepo.GetFileURL(ctx, fileID)
 	if errDoc != nil {
@@ -74,7 +91,20 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		return err
 	}
 
-	// TODO: Reject if not csv
+	// Reject if not csv
+	if !strings.HasSuffix(strings.ToLower(fileUrl), ".csv") {
+		err = s.notifyError(ctx, userID, "File must be csv, please upload again")
+		if err != nil {
+			err = fmt.Errorf("err notifyError: %w", err)
+			logger.Warn(ctx, err.Error())
+		}
+
+		err = session.ResetTimer(userID)
+		if err != nil {
+			err = fmt.Errorf("err session.ResetTimer: %w", err)
+		}
+		return err
+	}
 
 	// Get file content
 	resp, errDoc := http.Get(fileUrl)
@@ -156,18 +186,7 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		}
 	}
 
-	// Notify result
-	resultMsg := "Finished"
-	for _, v := range result {
-		resultMsg = fmt.Sprintf("%s\n- %s", resultMsg, v)
-	}
-	resultMsg = fmt.Sprintf("%s\n\nURL: %s", resultMsg, "TBA")
-
-	err = s.notifyError(ctx, userID, resultMsg)
-	if err != nil {
-		err = fmt.Errorf("err notifyError: %w", err)
-	}
-
+	err = nil
 	return nil
 }
 
