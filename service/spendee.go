@@ -11,8 +11,6 @@ import (
 	"github.com/frasnym/go-expense-telebot/common/logger"
 	"github.com/frasnym/go-expense-telebot/pkg/session"
 	"github.com/frasnym/go-expense-telebot/repository"
-
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 // SpendeeService is an interface for managing Spendee-related actions.
@@ -54,6 +52,7 @@ func (s *whatsappSvc) Request(ctx context.Context, userID int, chatID int64) err
 // Processor processes the user's input (document) for expense report.
 func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) error {
 	var err error
+	var result []string
 	defer func() {
 		logger.LogService(ctx, "SpendeeProcessor", err)
 	}()
@@ -108,7 +107,9 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		expenseDate := common.ParseSpendeeDate(record[0])
 
 		if expenseDate.After(thisBeginningMonth) {
-			logger.Warn(ctx, fmt.Sprintf("can only process ended month: %s", expenseDate.Format("2006-01-02")))
+			msg := fmt.Sprintf("can only process ended month: %s", expenseDate.Format("2006-01-02"))
+			result = append(result, msg)
+			logger.Warn(ctx, msg)
 			break
 		}
 
@@ -141,7 +142,9 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		}
 
 		if len(gsheetValues.Values) > 0 {
-			logger.Warn(ctx, fmt.Sprintf("data already written: %s, skipping...", targetRange))
+			msg := fmt.Sprintf("data already written: %s, skipping...", targetRange)
+			result = append(result, msg)
+			logger.Warn(ctx, msg)
 			continue
 		}
 
@@ -153,7 +156,18 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		}
 	}
 
-	err = nil
+	// Notify result
+	resultMsg := "Finished"
+	for _, v := range result {
+		resultMsg = fmt.Sprintf("%s\n- %s", resultMsg, v)
+	}
+	resultMsg = fmt.Sprintf("%s\n\nURL: %s", resultMsg, "TBA")
+
+	err = s.notifyError(ctx, userID, resultMsg)
+	if err != nil {
+		err = fmt.Errorf("err notifyError: %w", err)
+	}
+
 	return nil
 }
 
@@ -174,14 +188,7 @@ func (s *whatsappSvc) notifyError(ctx context.Context, userID int, msg string) e
 		return err
 	}
 
-	messageID, err := session.GetMessageID(userID)
-	if err != nil {
-		err = fmt.Errorf("err session.GetMessageID: %w", err)
-		return err
-	}
-
-	editMsg := tgbotapi.NewEditMessageText(chatID, messageID, msg)
-	_, err = s.botRepo.SendMessage(ctx, editMsg)
+	_, err = s.botRepo.SendTextMessage(ctx, chatID, msg)
 	if err != nil {
 		err = fmt.Errorf("err botRepo.SendMessage: %w", err)
 		return err
