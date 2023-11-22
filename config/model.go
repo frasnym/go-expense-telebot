@@ -5,7 +5,6 @@ type Config struct {
 	VercelUrl              string `env:"VERCEL_URL"`
 	Port                   string `env:"PORT"`
 	TelegramBotToken       string `env:"TELEGRAM_BOT_TOKEN"`
-	TrueCallerToken        string `env:"TRUECALLER_TOKEN"`
 	GsheetID               string `env:"GSHEET_ID"`
 	GsheetProjectID        string `env:"GSHEET_PROJECT_ID"`
 	GsheetUserPrivateKeyID string `env:"GSHEET_USER_PRIVATE_KEY_ID"`
