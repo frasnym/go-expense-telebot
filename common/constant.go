@@ -5,5 +5,5 @@ import "time"
 const (
 	CommandUploadSpendee = "upload_spendee"
 
-	SessionTimeout = 5 * time.Second
+	SessionTimeout = 10 * time.Second
 )
