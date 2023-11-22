@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/frasnym/go-expense-telebot/common"
 	"github.com/frasnym/go-expense-telebot/common/ctxdata"
 	"github.com/frasnym/go-expense-telebot/common/logger"
+	"github.com/frasnym/go-expense-telebot/common/notification"
 	"github.com/frasnym/go-expense-telebot/config"
 	"github.com/frasnym/go-expense-telebot/pkg/gsheet"
 	"github.com/frasnym/go-expense-telebot/pkg/session"
@@ -32,9 +32,16 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create a new bot repository with the application's configuration and Telegram bot
 	cfg := config.GetConfig()
+
+	// Init repo
 	botRepo := repository.NewBotRepository(cfg, telebot.GetBot())
 	gsheetRepo := repository.NewGSheetRepository(cfg, gsheet.GetService())
-	spendeeSvc := service.NewSpendeeService(&botRepo, &gsheetRepo)
+
+	// Init client
+	notificationClient := notification.New(botRepo)
+
+	// Init service
+	spendeeSvc := service.NewSpendeeService(&botRepo, &gsheetRepo, &notificationClient)
 
 	// Get the update from the request body
 	update, err := botRepo.GetUpdate(ctx, r.Body)
@@ -79,8 +86,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			} else {
-				// TODO: Handle not file
-				err = errors.New("no file uploaded")
+				notificationClient.NotifySendToChat(ctx, userID, "no file uploaded")
 			}
 
 			return

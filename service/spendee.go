@@ -10,6 +10,7 @@ import (
 
 	"github.com/frasnym/go-expense-telebot/common"
 	"github.com/frasnym/go-expense-telebot/common/logger"
+	"github.com/frasnym/go-expense-telebot/common/notification"
 	"github.com/frasnym/go-expense-telebot/pkg/session"
 	"github.com/frasnym/go-expense-telebot/repository"
 )
@@ -20,12 +21,14 @@ type SpendeeService interface {
 	Processor(ctx context.Context, userID int, input string) error
 }
 
-type whatsappSvc struct {
+type spendeeSvc struct {
 	botRepo    repository.BotRepository
 	gsheetRepo repository.GSheetRepository
+
+	notificationClient notification.NotificationClient
 }
 
-func (s *whatsappSvc) Request(ctx context.Context, userID int, chatID int64) error {
+func (s *spendeeSvc) Request(ctx context.Context, userID int, chatID int64) error {
 	var err error
 	defer func() {
 		logger.LogService(ctx, "SpendeeRequest", err)
@@ -51,7 +54,7 @@ func (s *whatsappSvc) Request(ctx context.Context, userID int, chatID int64) err
 }
 
 // Processor processes the user's input (document) for expense report.
-func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) error {
+func (s *spendeeSvc) Processor(ctx context.Context, userID int, fileID string) error {
 	var err error
 	var result []string
 	defer func() {
@@ -59,11 +62,7 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 	}()
 
 	if session.IsInteractionTimedOut(userID) {
-		err = s.notifyError(ctx, userID, "Request Timeout")
-		if err != nil {
-			err = fmt.Errorf("err notifyError: %w", err)
-		}
-
+		s.notificationClient.NotifySendToChat(ctx, userID, "Request timeout")
 		session.DeleteUserSession(userID)
 		return err
 	}
@@ -76,11 +75,7 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 		}
 		resultMsg = fmt.Sprintf("%s\n\nURL: %s", resultMsg, "TBA")
 
-		err = s.notifyError(ctx, userID, resultMsg)
-		if err != nil {
-			err = fmt.Errorf("err notifyError: %w", err)
-		}
-
+		s.notificationClient.NotifySendToChat(ctx, userID, resultMsg)
 		session.DeleteUserSession(userID)
 	}()
 
@@ -93,11 +88,7 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 
 	// Reject if not csv
 	if !strings.HasSuffix(strings.ToLower(fileUrl), ".csv") {
-		err = s.notifyError(ctx, userID, "File must be csv, please upload again")
-		if err != nil {
-			err = fmt.Errorf("err notifyError: %w", err)
-			logger.Warn(ctx, err.Error())
-		}
+		s.notificationClient.NotifySendToChat(ctx, userID, "File must be csv, please upload again")
 
 		err = session.ResetTimer(userID)
 		if err != nil {
@@ -191,27 +182,6 @@ func (s *whatsappSvc) Processor(ctx context.Context, userID int, fileID string) 
 }
 
 // NewSpendeeService creates a new SpendeeService using the provided bot repository.
-func NewSpendeeService(botRepo *repository.BotRepository, gsheetRepo *repository.GSheetRepository) SpendeeService {
-	return &whatsappSvc{botRepo: *botRepo, gsheetRepo: *gsheetRepo}
-}
-
-func (s *whatsappSvc) notifyError(ctx context.Context, userID int, msg string) error {
-	var err error
-	defer func() {
-		logger.LogService(ctx, "SpendeeNotifyError", err)
-	}()
-
-	chatID, err := session.GetChatID(userID)
-	if err != nil {
-		err = fmt.Errorf("err session.GetChatID: %w", err)
-		return err
-	}
-
-	_, err = s.botRepo.SendTextMessage(ctx, chatID, msg)
-	if err != nil {
-		err = fmt.Errorf("err botRepo.SendMessage: %w", err)
-		return err
-	}
-
-	return nil
+func NewSpendeeService(botRepo *repository.BotRepository, gsheetRepo *repository.GSheetRepository, notificationClient *notification.NotificationClient) SpendeeService {
+	return &spendeeSvc{botRepo: *botRepo, gsheetRepo: *gsheetRepo, notificationClient: *notificationClient}
 }
