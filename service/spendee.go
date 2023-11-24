@@ -139,10 +139,10 @@ func (s *spendeeSvc) Processor(ctx context.Context, userID int, fileID string) e
 			gsheetInputMap[dateMonthFormat],
 			[]any{
 				expenseDate.Format("2006-01-02 15:04:05"), // Date
-				record[3], // Category
-				record[4], // Amount
-				record[6], // Note
-				record[7], // Label
+				record[3],                              // Category
+				strings.Replace(record[4], "-", "", 1), // Amount
+				record[6],                              // Note
+				record[7],                              // Label
 			},
 		)
 	}
